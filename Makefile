@@ -3,13 +3,11 @@ BINARY_NAME=parrot
 .DEFAULT_GOAL := build
 
 SRCS= \
-	parrot.go \
-	reader.go \
-	seen.go \
-	writer.go
+	parrot.go
+
 
 run:
-	go run parrot.go
+	go run $(SRCS)
 
 
 build:

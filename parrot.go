@@ -172,12 +172,10 @@ func main() {
 
 		if _, err := os.Stat(audioFilepath); err == nil {
 			// File exists. Just write the output and we're done.
-			fmt.Println(outputRecord)
 			csvwriter.Write(outputRecord)
 			continue
 		} else if errors.Is(err, os.ErrNotExist) {
 			// File doesn't exist, so spawn the job to fetch it.
-			fmt.Println(outputRecord)
 			wg.Add(1)
 			go fetchAudio(
 				pollyClient,

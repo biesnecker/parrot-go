@@ -36,17 +36,21 @@ func printErrAndExit(err error) {
 	os.Exit(1)
 }
 
+type fetchAudioParams struct {
+	pollyClient *polly.Polly
+	rateLimiter ratelimit.Limiter
+	waitGroup   *sync.WaitGroup
+}
+
 func fetchAudio(
-	pollyClient *polly.Polly,
 	text string,
 	languageCode string,
 	voice string,
 	useNeural bool,
 	audioFilepath string,
-	rl ratelimit.Limiter,
-	wg *sync.WaitGroup,
+	params *fetchAudioParams,
 ) {
-	defer wg.Done()
+	defer params.waitGroup.Done()
 	input := &polly.SynthesizeSpeechInput{
 		OutputFormat: aws.String("mp3"),
 		Text:         aws.String(text),
@@ -59,8 +63,8 @@ func fetchAudio(
 		input.Engine = aws.String(polly.EngineStandard)
 	}
 
-	rl.Take()
-	pollyResponse, err := pollyClient.SynthesizeSpeech(input)
+	params.rateLimiter.Take()
+	pollyResponse, err := params.pollyClient.SynthesizeSpeech(input)
 	if err != nil {
 		printErrAndExit(err)
 	}
@@ -78,9 +82,11 @@ func fetchAudio(
 func main() {
 	var options opts
 
-	sess := session.Must(session.NewSessionWithOptions(session.Options{
-		SharedConfigState: session.SharedConfigEnable,
-	}))
+	sess := session.Must(session.NewSessionWithOptions(
+		session.Options{
+			SharedConfigState: session.SharedConfigEnable,
+			Config:            aws.Config{Region: aws.String("us-west-2")},
+		}))
 
 	pollyClient := polly.New(sess)
 
@@ -99,8 +105,6 @@ func main() {
 		maxRequestsPerSecond = 80
 	}
 
-	rl := ratelimit.New(maxRequestsPerSecond)
-
 	seen := make(map[string]int)
 
 	inputfile, err := os.Open(options.Input)
@@ -118,7 +122,11 @@ func main() {
 	csvreader := csv.NewReader(inputfile)
 	csvwriter := csv.NewWriter(outputfile)
 
-	var wg sync.WaitGroup
+	fetchParams := fetchAudioParams{
+		pollyClient: pollyClient,
+		waitGroup:   &sync.WaitGroup{},
+		rateLimiter: ratelimit.New(maxRequestsPerSecond),
+	}
 
 	lineNo := 0
 	numColumns := -1
@@ -176,16 +184,14 @@ func main() {
 			continue
 		} else if errors.Is(err, os.ErrNotExist) {
 			// File doesn't exist, so spawn the job to fetch it.
-			wg.Add(1)
+			fetchParams.waitGroup.Add(1)
 			go fetchAudio(
-				pollyClient,
 				record[0],
 				options.Language,
 				options.Voice,
 				options.Neural,
 				audioFilepath,
-				rl,
-				&wg,
+				&fetchParams,
 			)
 			csvwriter.Write(outputRecord)
 		} else {
@@ -195,5 +201,5 @@ func main() {
 	}
 
 	csvwriter.Flush()
-	wg.Wait()
+	fetchParams.waitGroup.Wait()
 }

@@ -29,6 +29,8 @@ type opts struct {
 	Voice string `short:"v" long:"voice" description:"AWS Polly voice to use" required:"true"`
 
 	Neural bool `short:"n" long:"neural" description:"Use neural voice"`
+
+	Region string `short:"r" long:"region" description:"The AWS region to call" default:"us-west-2"`
 }
 
 func printErrAndExit(err error) {
@@ -82,14 +84,6 @@ func fetchAudio(
 func main() {
 	var options opts
 
-	sess := session.Must(session.NewSessionWithOptions(
-		session.Options{
-			SharedConfigState: session.SharedConfigEnable,
-			Config:            aws.Config{Region: aws.String("us-west-2")},
-		}))
-
-	pollyClient := polly.New(sess)
-
 	var parser = flags.NewParser(&options, flags.Default)
 	if _, err := parser.Parse(); err != nil {
 		if flagErr, ok := err.(*flags.Error); ok && flagErr.Type == flags.ErrHelp {
@@ -97,6 +91,14 @@ func main() {
 		}
 		os.Exit(1)
 	}
+
+	sess := session.Must(session.NewSessionWithOptions(
+		session.Options{
+			SharedConfigState: session.SharedConfigEnable,
+			Config:            aws.Config{Region: aws.String(options.Region)},
+		}))
+
+	pollyClient := polly.New(sess)
 
 	var maxRequestsPerSecond int
 	if options.Neural {

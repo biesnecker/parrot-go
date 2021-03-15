@@ -1,4 +1,4 @@
-module github.com/biesnecker/parrot
+module github.com/biesnecker/parrot-go
 
 go 1.15
 
